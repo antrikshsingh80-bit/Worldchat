@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorldChat Pro Max</title>
+    <style>
+        :root { --wa-teal: #008069; --wa-bg: #efeae2; --wa-light-green: #dcf8c6; --white: #ffffff; }
+        body, html { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; background: #d1d7db; overflow: hidden; }
+        #app { width: 100%; max-width: 500px; height: 100vh; margin: 0 auto; background: var(--white); display: flex; flex-direction: column; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.2); }
+
+        header { background: var(--wa-teal); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 18px; }
+        .tabs { background: var(--wa-teal); color: rgba(255,255,255,0.7); display: flex; text-align: center; }
+        .tab { flex: 1; padding: 12px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .tab.active { color: white; border-bottom: 3px solid white; }
+
+        .page { display: none; height: calc(100% - 105px); overflow-y: auto; flex-direction: column; background: white; }
+        .active-page { display: flex; }
+
+        .chat-row { display: flex; padding: 12px 15px; border-bottom: 1px solid #f2f2f2; cursor: pointer; align-items: center; }
+        .pfp { width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; object-fit: cover; background: #eee; border: 1px solid #ddd; }
+        
+        .chat-view { position: absolute; inset: 0; background: var(--wa-bg); background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); z-index: 50; display: none; flex-direction: column; }
+        .msg-container { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 6px; }
+        
+        .bubble { max-width: 75%; padding: 8px 12px; border-radius: 10px; font-size: 14px; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); line-height: 1.4; word-wrap: break-word; }
+        .sent { align-self: flex-end; background: var(--wa-light-green); border-top-right-radius: 0; }
+        .recv { align-self: flex-start; background: var(--white); border-top-left-radius: 0; border: 1px solid #eee; }
+        
+        footer { background: #f0f0f0; padding: 10px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #ddd; }
+        footer input { flex: 1; border: none; padding: 12px; border-radius: 25px; outline: none; font-size: 14px; height: 40px; text-indent: 10px; }
+        .btn-send { background: var(--wa-teal); color: white; border: none; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+
+        /* AUTH UI */
+        .auth-screen { position: absolute; inset: 0; background: var(--wa-teal); z-index: 100; display: flex; justify-content: center; align-items: center; }
+        .auth-card { background: white; padding: 25px; border-radius: 15px; width: 85%; text-align: center; }
+        .auth-card input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .auth-btn { width: 100%; padding: 12px; background: var(--wa-teal); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .auth-toggle { margin-top: 15px; font-size: 13px; color: #666; cursor: pointer; text-decoration: underline; }
+
+        .menu { position: absolute; top: 55px; right: 10px; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 8px; display: none; flex-direction: column; z-index: 60; min-width: 220px; }
+        .menu span { padding: 14px 16px; cursor: pointer; font-size: 13px; border-bottom: 1px solid #f0f0f0; display: block; color: #333; }
+
+        .emoji-drawer { display: none; background: #fff; border-top: 1px solid #ddd; padding: 10px; grid-template-columns: repeat(8, 1fr); gap: 10px; max-height: 150px; overflow-y: auto; }
+        .emoji-drawer span { font-size: 22px; cursor: pointer; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-card" id="signup-form">
+            <h2 style="color:var(--wa-teal)">Create Account</h2>
+            <input type="text" id="s-name" placeholder="Full Name">
+            <input type="text" id="s-code" placeholder="Choose Unique Code (e.g. user123)">
+            <input type="text" id="s-pfp" placeholder="Profile Photo URL">
+            <input type="password" id="s-pass" placeholder="Create Password">
+            <button class="auth-btn" onclick="handleSignUp()">SIGN UP</button>
+            <div class="auth-toggle" onclick="toggleAuth(false)">Already have an ID? Login</div>
+        </div>
+
+        <div class="auth-card" id="login-form" style="display:none;">
+            <h2 style="color:var(--wa-teal)">Login</h2>
+            <input type="text" id="l-code" placeholder="Your Unique Code">
+            <input type="password" id="l-pass" placeholder="Password">
+            <button class="auth-btn" onclick="handleLogin()">LOGIN</button>
+            <div class="auth-toggle" onclick="toggleAuth(true)">New here? Sign Up</div>
+        </div>
+    </div>
+
+    <header>
+        <span>WorldChat</span>
+        <span onclick="logout()" style="font-size:12px; cursor:pointer;">Logout</span>
+    </header>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('chats')">CHATS</div>
+        <div class="tab" onclick="switchTab('world')">WORLD</div>
+        <div class="tab" onclick="switchTab('ai')">AI CHATS</div>
+    </div>
+
+    <div id="page-chats" class="page active-page">
+        <div style="padding:10px; background:#f0f2f5;"><input type="text" placeholder="Search code..." style="width:100%; padding:10px; border-radius:20px; border:1px solid #ccc;" onkeypress="if(event.key==='Enter') searchFriend(this.value)"></div>
+        <div id="friend-list"></div>
+    </div>
+
+    <div id="page-world" class="page">
+        <div id="world-msgs" class="msg-container"></div>
+        <div id="world-emoji" class="emoji-drawer"></div>
+        <footer>
+            <span onclick="toggleEmoji('world-emoji')" style="cursor:pointer; font-size:20px;">😊</span>
+            <input type="text" id="world-input" placeholder="Message Global..." onkeypress="if(event.key==='Enter') sendWorld()">
+            <button class="btn-send" onclick="sendWorld()">➤</button>
+        </footer>
+    </div>
+
+    <div id="page-ai" class="page"><div id="ai-list"></div></div>
+
+    <div id="chat-view" class="chat-view">
+        <header style="padding:10px;">
+            <span onclick="closeChat()" style="cursor:pointer">←</span>
+            <img id="view-pfp" class="pfp" style="width:35px; height:35px; margin: 0 10px;">
+            <div style="flex:1">
+                <div id="view-name">Name</div>
+                <div id="chat-sub-status" style="font-size:10px; font-weight:normal; opacity:0.9;">online</div>
+            </div>
+            <span onclick="toggleMenu()" style="cursor:pointer; font-size:22px;">⋮</span>
+            <div id="menu" class="menu">
+                <span onclick="toggleDestruction()">⌛ Auto-Delete (5m): <b id="dest-val">OFF</b></span>
+                <span onclick="changeNickname()">✏️ Set Nickname</span>
+                <span onclick="clearChatNormal()">🧹 Clear Chat Screen</span>
+                <span id="ai-delete-btn" onclick="clearChatFull()" style="color:red; display:none;">💀 Delete AI Memory</span>
+            </div>
+        </header>
+        <div id="msg-display" class="msg-container"></div>
+        <div id="main-emoji" class="emoji-drawer"></div>
+        <footer>
+            <span onclick="toggleEmoji('main-emoji')" style="cursor:pointer; font-size:20px;">😊</span>
+            <input type="text" id="main-input" placeholder="Type message..." onkeypress="if(event.key==='Enter') sendMsg()">
+            <button class="btn-send" onclick="sendMsg()">➤</button>
+        </footer>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURE ---
+    const GROQ_API_KEY = "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"; 
+
+    const bots = [
+        {id:'ai_b1', name: 'Aryan (Calm)', pfp: '1.png', prompt: 'Calm boy. Short human replies (max 5 words).'},
+        {id:'ai_b2', name: 'Kabir (Bold)', pfp: '2.png', prompt: 'Bold guy. Cool slang. Short text (max 5 words).'},
+        {id:'ai_g1', name: 'Aayushi (Innocent)', pfp: '3.png', prompt: 'Innocent girl. Shy. WhatsApp style short replies (max 5 words). No long talk.'},
+        {id:'ai_g2', name: 'Priya (Funny)', pfp: '4.png', prompt: 'Funny girl. Slang. Very short sarcastic replies (max 6 words). No long sentences.'}
+    ];
+
+    let me = JSON.parse(localStorage.getItem('wc_session'));
+    let activeID = null;
+    let isAI = false;
+
+    window.onload = () => { if(me) loadApp(); initEmojis(); };
+
+    // --- AUTH LOGIC ---
+    function toggleAuth(isSignup) {
+        document.getElementById('signup-form').style.display = isSignup ? 'block' : 'none';
+        document.getElementById('login-form').style.display = isSignup ? 'none' : 'block';
+    }
+
+    function handleSignUp() {
+        const name = document.getElementById('s-name').value;
+        const code = document.getElementById('s-code').value.trim().toLowerCase();
+        const pfp = document.getElementById('s-pfp').value || "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+        const pass = document.getElementById('s-pass').value;
+
+        let db = JSON.parse(localStorage.getItem('wc_global_db') || "{}");
+
+        if(!name || !code || !pass) return alert("Fill all fields!");
+        if(db[code]) return alert("This ID Code is already registered! Please Login.");
+
+        // Create User Object
+        const newUser = { name, code, pfp, pass, friends: [], nicknames: {}, destruct: {} };
+        db[code] = newUser;
+        localStorage.setItem('wc_global_db', JSON.stringify(db));
+        localStorage.setItem('wc_session', JSON.stringify(newUser));
+        location.reload();
+    }
+
+    function handleLogin() {
+        const code = document.getElementById('l-code').value.trim().toLowerCase();
+        const pass = document.getElementById('l-pass').value;
+
+        let db = JSON.parse(localStorage.getItem('wc_global_db') || "{}");
+
+        if(!db[code]) return alert("User code not found! Please Sign Up.");
+        if(db[code].pass !== pass) return alert("Wrong password!");
+
+        localStorage.setItem('wc_session', JSON.stringify(db[code]));
+        location.reload();
+    }
+
+    function syncToGlobal() {
+        let db = JSON.parse(localStorage.getItem('wc_global_db') || "{}");
+        db[me.code] = me;
+        localStorage.setItem('wc_global_db', JSON.stringify(db));
+        localStorage.setItem('wc_session', JSON.stringify(me));
+    }
+
+    // --- CHAT LOGIC ---
+    function loadApp() {
+        document.getElementById('auth-screen').style.display = 'none';
+        renderFriendList(); renderAIList();
+        setInterval(autoSync, 1000); 
+    }
+
+    function autoSync() {
+        checkWorldExpiry();
+        checkDestruction();
+        if(document.getElementById('page-world').classList.contains('active-page')) renderWorld();
+        if(activeID) renderMessages();
+        renderFriendList();
+    }
+
+    function checkWorldExpiry() {
+        let w = JSON.parse(localStorage.getItem('wc_world') || "[]");
+        const fresh = w.filter(m => (Date.now() - m.time) < 86400000);
+        if(fresh.length !== w.length) localStorage.setItem('wc_world', JSON.stringify(fresh));
+    }
+
+    function checkDestruction() {
+        if(!activeID || !me.destruct[activeID]) return;
+        const key = `hist_${me.code}_${activeID}`;
+        let h = JSON.parse(localStorage.getItem(key) || "[]");
+        const fresh = h.filter(m => {
+            if(m.sender !== me.code && !m.seenAt) m.seenAt = Date.now();
+            return !(m.seenAt && (Date.now() - m.seenAt) > 300000);
+        });
+        if(fresh.length !== h.length) {
+            localStorage.setItem(key, JSON.stringify(fresh));
+        }
+    }
+
+    function renderAIList() {
+        const cont = document.getElementById('ai-list');
+        cont.innerHTML = bots.map(b => `<div class="chat-row" onclick="openChat('${b.id}', true)"><img src="${b.pfp}" class="pfp"><div><h4>${me.nicknames[b.id] || b.name}</h4><p style="font-size:12px;color:#888;">Online</p></div></div>`).join("");
+    }
+
+    function renderFriendList() {
+        const cont = document.getElementById('friend-list');
+        const db = JSON.parse(localStorage.getItem('wc_global_db') || "{}");
+        cont.innerHTML = me.friends.map(fCode => {
+            const user = db[fCode];
+            return `<div class="chat-row" onclick="openChat('${fCode}', false)"><img src="${user.pfp}" class="pfp"><div><h4>${me.nicknames[fCode] || user.name}</h4><p style="font-size:12px;color:#888;">Tap to chat</p></div></div>`;
+        }).join("");
+    }
+
+    function openChat(id, aiFlag) {
+        activeID = id; isAI = aiFlag;
+        document.getElementById('chat-view').style.display = 'flex';
+        document.getElementById('ai-delete-btn').style.display = isAI ? 'block' : 'none';
+        
+        let name, pfp;
+        if(isAI) { const b = bots.find(x => x.id === id); name = me.nicknames[id] || b.name; pfp = b.pfp; }
+        else { let db = JSON.parse(localStorage.getItem('wc_global_db')); name = me.nicknames[id] || db[id].name; pfp = db[id].pfp; }
+        
+        document.getElementById('view-name').innerText = name;
+        document.getElementById('view-pfp').src = pfp;
+        updateMenuUI();
+        renderMessages();
+    }
+
+    async function sendMsg() {
+        const inp = document.getElementById('main-input');
+        if(!inp.value.trim()) return;
+        const text = inp.value;
+        saveToHistory(activeID, text, me.code);
+        inp.value = "";
+        if(isAI) {
+            const bot = bots.find(b => b.id === activeID);
+            const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    model: "llama-3.3-70b-versatile", 
+                    messages: [{ role: "system", content: bot.prompt + ". Rules: Be a person chatting. No assistant talk. Short text only." }, {role: "user", content: text}],
+                    max_tokens: 20
+                })
+            });
+            const data = await res.json();
+            saveToHistory(activeID, data.choices[0].message.content, activeID);
+        }
+    }
+
+    function saveToHistory(id, text, senderCode) {
+        const key = `hist_${me.code}_${id}`;
+        let h = JSON.parse(localStorage.getItem(key) || "[]");
+        h.push({ text, sender: senderCode, time: Date.now(), seenAt: null });
+        localStorage.setItem(key, JSON.stringify(h));
+        if(!isAI) {
+            const revKey = `hist_${id}_${me.code}`;
+            let h2 = JSON.parse(localStorage.getItem(revKey) || "[]");
+            h2.push({ text, sender: senderCode, time: Date.now(), seenAt: null });
+            localStorage.setItem(revKey, JSON.stringify(h2));
+        }
+    }
+
+    function renderMessages() {
+        const cont = document.getElementById('msg-display');
+        const h = JSON.parse(localStorage.getItem(`hist_${me.code}_${activeID}`) || "[]");
+        cont.innerHTML = h.map(m => `<div class="bubble ${m.sender === me.code ? 'sent' : 'recv'}">${m.text}</div>`).join("");
+        cont.scrollTop = cont.scrollHeight;
+    }
+
+    function toggleDestruction() {
+        me.destruct[activeID] = !me.destruct[activeID];
+        syncToGlobal(); updateMenuUI();
+    }
+
+    function updateMenuUI() {
+        const active = me.destruct[activeID];
+        document.getElementById('dest-val').innerText = active ? 'ON' : 'OFF';
+        document.getElementById('chat-sub-status').innerText = active ? "online | ⌛ Auto-delete ON" : "online";
+    }
+
+    function changeNickname() {
+        const n = prompt("Set a private nickname:");
+        if(n) { me.nicknames[activeID] = n; syncToGlobal(); openChat(activeID, isAI); renderFriendList(); renderAIList(); }
+    }
+
+    function clearChatNormal() { localStorage.setItem(`hist_${me.code}_${activeID}`, "[]"); toggleMenu(); }
+    function clearChatFull() {
+        if(confirm("DELETE AI MEMORY?") && prompt("Password:") === me.pass) {
+            localStorage.removeItem(`hist_${me.code}_${activeID}`);
+            localStorage.removeItem(`mem_${me.code}_${activeID}`);
+            closeChat();
+        }
+    }
+
+    function sendWorld() {
+        const i = document.getElementById('world-input');
+        if(!i.value) return;
+        let w = JSON.parse(localStorage.getItem('wc_world') || "[]");
+        w.push({ n: me.name, t: i.value, c: me.code, time: Date.now() });
+        localStorage.setItem('wc_world', JSON.stringify(w));
+        i.value = "";
+    }
+
+    function renderWorld() {
+        const c = document.getElementById('world-msgs');
+        let w = JSON.parse(localStorage.getItem('wc_world') || "[]");
+        c.innerHTML = w.map(m => `<div class="bubble ${m.c === me.code ? 'sent' : 'recv'}"><b style="font-size:10px;color:var(--wa-teal)">${m.n}</b><br>${m.t}</div>`).join("");
+        c.scrollTop = c.scrollHeight;
+    }
+
+    function searchFriend(code) {
+        code = code.trim().toLowerCase();
+        let db = JSON.parse(localStorage.getItem('wc_global_db') || "{}");
+        if(db[code] && code !== me.code && !me.friends.includes(code)) {
+            me.friends.push(code);
+            syncToGlobal(); renderFriendList();
+        } else if(!db[code]) alert("User code not found!");
+    }
+
+    function initEmojis() {
+        const emojis = ["😀","😂","😍","🥰","😘","😭","🔥","❤️","✨","🙌","💀","🤣","🤔","🙄","👀","👍","🙏","💔"];
+        ['main-emoji', 'world-emoji'].forEach(id => {
+            document.getElementById(id).innerHTML = emojis.map(e => `<span onclick="addEmoji('${e}')">${e}</span>`).join("");
+        });
+    }
+
+    function addEmoji(e) {
+        const inp = (document.getElementById('chat-view').style.display === 'flex') ? 'main-input' : 'world-input';
+        document.getElementById(inp).value += e;
+    }
+
+    function toggleEmoji(id) { const d = document.getElementById(id); d.style.display = (d.style.display === 'grid') ? 'none' : 'grid'; }
+    function toggleMenu() { const m = document.getElementById('menu'); m.style.display = (m.style.display === 'flex') ? 'none' : 'flex'; }
+    function closeChat() { document.getElementById('chat-view').style.display = 'none'; activeID = null; }
+    function switchTab(t) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.getElementById('page-'+t).classList.add('active-page');
+        event.currentTarget.classList.add('active');
+    }
+    function logout() { localStorage.removeItem('wc_session'); location.reload(); }
+</script>
+</body>
+</html>
